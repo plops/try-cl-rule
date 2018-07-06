@@ -1,5 +1,5 @@
 ;; http://lisa.sourceforge.net/mab-clos.lisp
-;; https://github.com/Ramarren/lisa/blob/master/misc/mab-clos.lisp
+;; https://github.com/johanlindberg/lisa/blob/master/misc/mab-clos.lisp
 ;; quicklisp/dists/quicklisp/software/lisa-20120407-git/misc/mab-clos.lisp
 ;; https://github.com/briangu/OPS5/blob/master/demo/ops-demo-mab.lisp
 ;; https://en.wikipedia.org/wiki/OPS5
@@ -12,6 +12,14 @@
 ;; output, and so forth. Execution continues until no more matches can
 ;; be found.
 
+;; how does lisa compare to ops5?
+;; https://github.com/johanlindberg/benchmarks
+
+
+;; http://rplaca.pulp.se/ However, the only, currently available, open
+;; source Common Lisp Production System (LISA) is not only abandoned
+;; but also shows quite poor performance.
+;; https://github.com/johanlindberg/minimal-production-system
 ;; martin kielhorn 2018-07-05
 (eval-when (:execute :compile-toplevel :load-toplevel)
   (ql:quickload :lisa)
@@ -96,4 +104,30 @@
 ;;; hold objects
 
 (defrule unlock-chest-to-hold-object ()
-  (goal-is-to (action hold) (argument-1 ?obj)))
+  (goal-is-to (action hold) (argument-1 ?obj))
+  (chest (name ?chest) (contents ?obj))
+  (not (goal-is-to (action unlock) (argument-1 ?chest)))
+  =>
+  (assert ((make-instance 'goal-is-to :action 'unlock :argument-1 ?chest))))
+
+(defrule use-ladder-to-hold ()
+  (goal-is-to (action hold) (argument-1 ?obj))
+  (thing (name ?obj) (location ?place) (on-top-of ceiling) (weight light))
+  (not (thing (name ladder) (location ?place)))
+  (not (goal-is-to (action move) (argument-1 ladder) (argument-2 ?place)))
+  =>
+  (assert ((make-instance 'goal-is-to :action 'move :argument-1 'ladder
+			  :argument-2 ?place))))
+
+(defrule climb-ladder-to-hold ()
+  (goal-is-to (action hold) (argument-1 ?obj))
+  (thing (name ?obj) (location ?place) (on-top-of ceiling) (weight light))
+  (thing (name ladder) (location ?place) (on-top-of floor))
+  (monkey (on-top-of (not ladder)))
+  (not (goal-is-to (action on) (argument-1 ladder)))
+  =>
+  (assert ((make-instance 'goal-is-to :action 'on :argument-1 'ladder))))
+
+
+(defrule grab-object-from-ladder ()
+  (?goal (goal-is-to (action hold))))
