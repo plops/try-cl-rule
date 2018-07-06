@@ -1,12 +1,27 @@
 ;; http://lisa.sourceforge.net/mab-clos.lisp
-;; martin kielhorn 2018-07-05
+;; https://github.com/Ramarren/lisa/blob/master/misc/mab-clos.lisp
+;; quicklisp/dists/quicklisp/software/lisa-20120407-git/misc/mab-clos.lisp
+;; https://github.com/briangu/OPS5/blob/master/demo/ops-demo-mab.lisp
+;; https://en.wikipedia.org/wiki/OPS5
 
-(ql:quickload :lisa)
-(ql:quickload :defclass-std)
+;; OPS5 uses a forward chaining inference engine; programs execute by
+;; scanning "working memory elements" (which are vaguely object-like,
+;; with classes and attributes) looking for matches with the rules in
+;; "production memory". Rules have actions that may modify or remove
+;; the matched element, create new ones, perform side effects such as
+;; output, and so forth. Execution continues until no more matches can
+;; be found.
+
+;; martin kielhorn 2018-07-05
+(eval-when (:execute :compile-toplevel :load-toplevel)
+  (ql:quickload :lisa)
+  (ql:quickload :defclass-std))
 (defpackage :g
   (:use :cl :defclass-std :lisa)
   (:shadowing-import-from :lisa :assert))
 (in-package :g)
+
+(lisa:consider-taxonomy)
 
 (class/std mab-fundamental)
 (defclass/std monkey ()
@@ -28,8 +43,57 @@
    (argument-1)
    (argument-2 :std nil)))
 
-(defimport mab-fundamental (g::mab-fundamental) ())
-(defimport monkey (g::monkey (mab-fundamental)) ())
-(defimport thing (g::thing (mab-fundamental)) ())
-(defimport chest (g::chest (mab-fundamental)) ())
-(defimport goal-is-to (g::goal-is-to (mab-fundamental)) (action argument-1 argument-2))
+;;; unlocking chest
+
+(defrule hold-chest-to-put-on-floor ()
+  (goal-is-to (action unlock) (argument-1 ?chest))
+  (thing (name ?chest) (on-top-of (not floor)) (weight light))
+  (monkey (holding (not ?chest)))
+  (not (goal-is-to (action hold) (argument-1 ?chest)))
+  =>
+  (assert ((make-instance 'goal-is-to :action 'hold :argument-1 ?chest))))
+
+(defrule put-chest-on-floor ()
+  (goal-is-to (action unlock) (argument-1 ?chest))
+  (?monkey (monkey (location ?place) (on-top-of ?on) (holding ?chest)))
+  (?thing (thing (name ?chest)))
+  =>
+  (format t "monkey throws the ~a off the ~a onto the floor.~%" ?chest ?on)
+  (modify ?monkey (holding blank))
+  (modify ?thing (location ?place) (on-top-of floor)))
+
+(defrule get-key-to-unlock ()
+  (goal-is-to (action unlock) (argument-1 ?obj))
+  (thing (name ?obj) (on-top-of floor))
+  (chest (name ?obj) (unlocked-by ?key))
+  (monkey (holding (not ?key)))
+  (not (goal-is-to (action hold) (argument-1 ?key)))
+  =>
+  (assert ((make-instance 'goal-is-to :action 'hold :argument-1 ?key))))
+
+(defrule move-to-chest-with-key ()
+  (goal-is-to (action unlock) (argument-1 ?chest))
+  (thing (name ?chest) (location ?place) (on-top-of floor))
+  (monkey (location (not ?cplace)) (holding ?key))
+  (chest (name ?chest) (unlocked-by ?key))
+  (not (goal-is-to (action walk-to) (argument-1 ?cplace)))
+  =>
+  (assert ((make-instance 'goal-is-to :action 'walk-to :argument-1 ?cplace))))
+
+(defrule unlock-chest-with-key ()
+  (?goal (goal-is-to (action unlock) (argument-1 ?name)))
+  (?chest (chest (name ?name) (contents ?contents) (unlocked-by ?key)))
+  (thing (name ?name) (location ?place) (on-top-of ?on))
+  (monkey (location ?place) (on-top-of ?on) (holding ?key))
+  =>
+  (format t "monkey opens the ~a ith the ~a revealing a ~a.~%"
+	  ?name ?key ?contents)
+  (modify ?chest (contents nothing))
+  (assert ((make-instance 'thing :name ?contents :location ?place
+			  :weight 'light :on-top-of ?name)))
+  (retract ?goal))
+
+;;; hold objects
+
+(defrule unlock-chest-to-hold-object ()
+  (goal-is-to (action hold) (argument-1 ?obj)))
